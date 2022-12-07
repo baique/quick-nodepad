@@ -1,0 +1,131 @@
+﻿<Window
+    x:Class="ShellNodepad.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:shellnodepad="clr-namespace:ShellNodepad;assembly=QuickNodepad"
+    xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+    x:Name="SelfWindow"
+    Title="速记"
+    Width="400"
+    Height="500"
+    AllowDrop="True"
+    AllowsTransparency="True"
+    Background="#00FFFFFF"
+    Closed="OnClosed"
+    Closing="BeforeClose"
+    Loaded="ViewLoaded"
+    LocationChanged="OnLocationChanged"
+    ShowInTaskbar="False"
+    Topmost="True"
+    WindowChrome.WindowChrome="{DynamicResource WindowChromeKey}"
+    WindowStartupLocation="CenterScreen"
+    WindowStyle="None">
+    <FrameworkElement.Resources>
+        <ResourceDictionary>
+            <WindowChrome x:Key="WindowChromeKey" CaptionHeight="0">
+                <WindowChrome.ResizeBorderThickness>
+                    <Thickness>5</Thickness>
+                </WindowChrome.ResizeBorderThickness>
+            </WindowChrome>
+        </ResourceDictionary>
+    </FrameworkElement.Resources>
+    <Border
+        Margin="5"
+        CornerRadius="10"
+        MouseLeftButtonDown="MoveWindow">
+        <Border.Style>
+            <Style TargetType="Border">
+                <Setter Property="Background" Value="#fff" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding ElementName=MiniMode, Path=Visibility}" Value="Visible">
+                        <Setter Property="Background" Value="Transparent" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
+        <UIElement.Effect>
+            <DropShadowEffect
+                BlurRadius="5"
+                Direction="10"
+                ShadowDepth="0"
+                Color="#FF858484" />
+        </UIElement.Effect>
+        <Grid Margin="4">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="24" />
+                <RowDefinition />
+            </Grid.RowDefinitions>
+            <DockPanel
+                Grid.Row="0"
+                Background="#fff"
+                LastChildFill="False">
+                <DockPanel.Style>
+                    <Style TargetType="DockPanel">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding ElementName=MiniMode, Path=Visibility}" Value="Visible">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </DockPanel.Style>
+                <StackPanel
+                    Width="Auto"
+                    Margin="5,0"
+                    VerticalAlignment="Center"
+                    DockPanel.Dock="Left"
+                    Orientation="Horizontal">
+                    <Image
+                        Width="18"
+                        Height="18"
+                        Source="pack://application:,,,/icon.ico" />
+                    <TextBlock
+                        Margin="5,0"
+                        VerticalAlignment="Center"
+                        FontSize="14px">
+                        速记
+                    </TextBlock>
+                </StackPanel>
+                <StackPanel VerticalAlignment="Center" DockPanel.Dock="Right">
+                    <Image
+                        Width="18"
+                        Height="18"
+                        MouseLeftButtonDown="CloseWindow">
+                        <FrameworkElement.Style>
+                            <Style TargetType="{x:Type Image}">
+                                <Setter Property="Source" Value="pack://application:,,,/resources/close.png" />
+                                <Style.Triggers>
+                                    <Trigger Property="UIElement.IsMouseOver" Value="True">
+                                        <Setter Property="Source" Value="pack://application:,,,/resources/close-hover.png" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </FrameworkElement.Style>
+                    </Image>
+                </StackPanel>
+            </DockPanel>
+            <Grid Grid.Row="1">
+                <Border
+                    x:Name="MiniMode"
+                    Background="#FFF"
+                    CornerRadius="20"
+                    Visibility="Collapsed" />
+                <wv2:WebView2 Name="WebView" MouseLeftButtonDown="MoveWindow">
+                    <wv2:WebView2.Style>
+                        <Style TargetType="wv2:WebView2">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ElementName=MiniMode, Path=Visibility}" Value="Visible">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </wv2:WebView2.Style>
+                </wv2:WebView2>
+            </Grid>
+
+        </Grid>
+    </Border>
+</Window>

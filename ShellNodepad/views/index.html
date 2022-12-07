@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <link rel="stylesheet" href="./vditor/index.css"/>
+    <script src="./vditor/index.min.js"></script>
+    <style>
+        * {
+            padding: 0;
+            margin: 0;
+        }
+
+        html, body {
+            height: 100vh;
+            width: 100%;
+        }
+
+        *::-webkit-scrollbar {
+            width: 5px;
+            height: 1px;
+        }
+
+        *::-webkit-scrollbar-thumb {
+            background: #535353;
+            border-radius: 10px;
+            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+        }
+
+        #editor {
+            border: none;
+        }
+
+        .vditor-toolbar, .vditor-wysiwyg pre.vditor-reset:focus {
+            background: #fff;
+        }
+    </style>
+</head>
+<body>
+<div id="editor">
+</div>
+<script>
+    new Vditor('editor', {
+        "height": '99%',
+        "toolbar": [
+            "list",
+            "ordered-list",
+            "table",
+            "check",
+            "code",
+            "outline",
+        ],
+        preview: {
+            theme: {
+                path: "./vditor/dist/css/content-theme"
+            }
+        },
+        "tab": "\t",
+        "icon": "material",
+        "cdn": "./vditor",
+        "toolbarConfig": {
+            "hide": false,
+        },
+        "cache": {
+            "enable": true,
+        },
+        "typewriterMode": false,
+        "value": "",
+        "mode": "wysiwyg",
+        "fullscreen": true,
+        "placeholder": "在这里编辑……"
+    })
+</script>
+</body>
+</html>

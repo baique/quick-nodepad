@@ -1,0 +1,44 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net6.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<UseWPF>true</UseWPF>
+		<UseWindowsForms>true</UseWindowsForms>
+		<ApplicationIcon>icon.ico</ApplicationIcon>
+		<SignAssembly>False</SignAssembly>
+		<Title>速记</Title>
+		<Version>1.0.0.0</Version>
+		<Authors>baique</Authors>
+		<Description>速记</Description>
+		<Copyright>Copyright @ baique</Copyright>
+		<PackageIcon>icon.ico</PackageIcon>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<RepositoryUrl>https://github.com/baique/quick-nodepad</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<BaseIntermediateOutputPath></BaseIntermediateOutputPath>
+		<BaseOutputPath></BaseOutputPath>
+		<AssemblyName>QuickNodepad</AssemblyName>
+		<PlatformTarget>AnyCPU</PlatformTarget>
+		<PublishSingleFile>true</PublishSingleFile>
+		<IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+	</PropertyGroup>
+	<ItemGroup>
+		<Resource Include="views\**" />
+		<Resource Include="icon.ico" />
+		<Resource Include="resources\**" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Include="..\README.md">
+	    <Pack>True</Pack>
+	    <PackagePath>\</PackagePath>
+	  </None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.1462.37" />
+	</ItemGroup>
+
+</Project>
