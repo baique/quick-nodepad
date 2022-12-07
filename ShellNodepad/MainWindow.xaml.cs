@@ -1,6 +1,7 @@
 ﻿using Microsoft.Web.WebView2.Core;
 using ShellNodepad.util;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Timers;
 using System.Windows;
@@ -36,15 +37,13 @@ namespace ShellNodepad
                 Left = SystemParameters.PrimaryScreenWidth / 2 - ActualWidth / 2;
                 Top = SystemParameters.PrimaryScreenHeight / 2 - ActualHeight / 2;
             }
-
-#if WINDOWS7_0_OR_GREATER
+#if WINDOWS7_0
             AllowsTransparency = false;
             SelfBorder.Margin = new Thickness(0);
 #endif
         }
         private void MoveWindow(object sender, MouseButtonEventArgs e)
         {
-
             Event.Stop = true;
             Event.Clear();
             this.BeginAnimation(Window.TopProperty, null);
@@ -161,9 +160,9 @@ namespace ShellNodepad
             private bool isHidden;
             private bool isTop;
             private Timer? timer;
-            private int triggerWeight = 12;
+            private int triggerWeight = 6;
             private int marginBorder = 2;
-            private int amTime = 350;
+            private int amTime = 240;
             private Storyboard? storyboard;
 
             public bool Stop { get; internal set; }
@@ -172,49 +171,51 @@ namespace ShellNodepad
             {
                 this.mw = mw;
                 this.mw.MouseEnter += (a, e) => OnMouseEnter();
-            }
-
-            private void ToggleVisible()
-            {
-                mw.Dispatcher.Invoke(() =>
+                this.mw.Activated += (a, e) => OnMouseEnter(false);
+                this.mw.StateChanged += (a, e) =>
                 {
-                    if (isHidden)
+                    if (dock && this.mw.WindowState == WindowState.Minimized)
+                    {
+                        this.mw.WindowState = WindowState.Normal;
+                        OnMouseLeave();
+                    }
+                };
+                this.mw.SizeChanged += (a, e) =>
+                {
+                    bool userResize = false;
+                    try { userResize = storyboard?.GetCurrentState() == ClockState.Stopped; } catch { }
+                    if (dock && userResize)
                     {
                         if (isTop)
                         {
-                            mw.MiniMode.Width = 150;
-                            mw.MiniMode.Height = mw.WebView.ActualHeight;
+                            rawValue = e.NewSize.Height;
                         }
                         else
                         {
-                            mw.MiniMode.Height = 150;
-                            mw.MiniMode.Width = mw.WebView.ActualWidth;
+                            rawValue = e.NewSize.Width;
                         }
-                        mw.MiniMode.CornerRadius = new CornerRadius(20);
-                        mw.MiniMode.Visibility = Visibility.Visible;
                     }
-                    else
-                    {
-                        mw.MiniMode.Visibility = Visibility.Collapsed;
-                    }
-                });
+                };
             }
 
-            public void OnMouseEnter()
+            private double rawValue;
+
+            public void OnMouseEnter(bool activte = true)
             {
-                mw.Dispatcher.Invoke(async () =>
+                if (activte)
                 {
-                    this.mw.Focus();
-                    this.mw.Activate();
-                    await this.mw.WebView.ExecuteScriptAsync("focusEditor()");
-                });
+                    mw.Dispatcher.Invoke(() =>
+                    {
+                        this.mw.Activate();
+                    });
+                }
                 if (Stop) return;
                 if (!dock) return;
                 mw.Dispatcher.Invoke(() =>
                 {
                     if (!isHidden) return;
                     Clear();
-                    //Trace.WriteLine("开始进入");
+                    Trace.WriteLine("开始进入");
                     isHidden = false;
                     if (isTop) Move("Top", marginBorder);
                     else Move("Left", SystemParameters.PrimaryScreenWidth - mw.Width - marginBorder);
@@ -234,7 +235,7 @@ namespace ShellNodepad
                     {
                         isHidden = true;
                         Clear();
-                        //Trace.WriteLine("开始离开");
+                        Trace.WriteLine("开始离开");
                         if (isTop) Move("Top", triggerWeight - mw.Height);
                         else Move("Left", SystemParameters.PrimaryScreenWidth - triggerWeight);
                     });
@@ -273,14 +274,38 @@ namespace ShellNodepad
                         Storyboard.SetTargetProperty(doubleAnimation, new PropertyPath($"(Window.{prop})"));
                         storyboard.Children.Add(doubleAnimation);
                     }
+                    if (isHidden)
+                    {
+                        DoubleAnimationUsingKeyFrames doubleAnimation = new DoubleAnimationUsingKeyFrames();
+                        if (isTop) { rawValue = mw.Width; Storyboard.SetTargetProperty(doubleAnimation, new PropertyPath($"(Window.Width)")); }
+                        else { rawValue = mw.Height; Storyboard.SetTargetProperty(doubleAnimation, new PropertyPath($"(Window.Height)")); }
+                        doubleAnimation.KeyFrames.Add(new EasingDoubleKeyFrame()
+                        {
+                            Value = 100,
+                            KeyTime = TimeSpan.FromMilliseconds(amTime)
+                        });
+                        storyboard.Children.Add(doubleAnimation);
+                    }
+                    else
+                    {
+                        DoubleAnimationUsingKeyFrames doubleAnimation = new DoubleAnimationUsingKeyFrames();
+                        if (isTop) Storyboard.SetTargetProperty(doubleAnimation, new PropertyPath($"(Window.Width)"));
+                        else Storyboard.SetTargetProperty(doubleAnimation, new PropertyPath($"(Window.Height)"));
+                        doubleAnimation.KeyFrames.Add(new EasingDoubleKeyFrame()
+                        {
+                            Value = rawValue,
+                            KeyTime = TimeSpan.FromMilliseconds(amTime)
+                        });
+                        storyboard.Children.Add(doubleAnimation);
+                    }
                     //Trace.WriteLine($"{prop} {value} {amTime}");
-
                     storyboard.Completed += (a, e) =>
                     {
                         onComplete?.Invoke();
                     };
+                    //onComplete?.Invoke();
                     storyboard.Begin(mw);
-
+                    Trace.WriteLine("动画开始");
                 });
             }
 
@@ -338,27 +363,35 @@ namespace ShellNodepad
             {
                 mw.Dispatcher.Invoke(() =>
                 {
-                    if (mw.WindowState == WindowState.Maximized)
+                    try
                     {
-                        dock = false;
-                        return;
-                    }
-                    if (IsToTop())
-                    {
-                        dock = true;
-                        isTop = true;
-                        if (!isHidden) mw.Top = marginBorder;
-                    }
-                    else if (IsToRight())
-                    {
-                        dock = true;
-                        isTop = false;
-                        if (!isHidden) mw.Left = SystemParameters.PrimaryScreenWidth - mw.Width - marginBorder;
+                        if (mw.WindowState == WindowState.Maximized)
+                        {
+                            dock = false;
+                            return;
+                        }
+                        if (IsToTop())
+                        {
+                            dock = true;
+                            isTop = true;
+                            if (!isHidden) mw.Top = marginBorder;
+                        }
+                        else if (IsToRight())
+                        {
+                            dock = true;
+                            isTop = false;
+                            if (!isHidden) mw.Left = SystemParameters.PrimaryScreenWidth - mw.Width - marginBorder;
 
+                        }
+                        else
+                        {
+                            dock = false;
+                        }
                     }
-                    else
+                    finally
                     {
-                        dock = false;
+                        this.mw.Topmost = dock;
+                        this.mw.ShowInTaskbar = !dock;
                     }
                 });
             }
@@ -372,7 +405,15 @@ namespace ShellNodepad
 
         private void OnDragEnter(object sender, DragEventArgs e)
         {
+            Event.Clear();
             Event.OnMouseEnter();
+            Event.Stop = true;
+        }
+
+        private void OnDragLeave(object sender, DragEventArgs e)
+        {
+            Event.Clear();
+            Event.Stop = false;
         }
     }
 }
