@@ -171,7 +171,6 @@ namespace ShellNodepad
             {
                 this.mw = mw;
                 this.mw.MouseEnter += (a, e) => OnMouseEnter();
-                this.mw.Activated += (a, e) => OnMouseEnter(false);
                 this.mw.StateChanged += (a, e) =>
                 {
                     if (dock && this.mw.WindowState == WindowState.Minimized)
