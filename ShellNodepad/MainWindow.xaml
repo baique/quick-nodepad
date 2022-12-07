@@ -15,8 +15,9 @@
     Background="#00FFFFFF"
     Closed="OnClosed"
     Closing="BeforeClose"
+    Deactivated="OnDeactivated"
+    DragEnter="OnDragEnter"
     Loaded="ViewLoaded"
-    LocationChanged="OnLocationChanged"
     ShowInTaskbar="False"
     Topmost="True"
     WindowChrome.WindowChrome="{DynamicResource WindowChromeKey}"
@@ -32,6 +33,7 @@
         </ResourceDictionary>
     </FrameworkElement.Resources>
     <Border
+        x:Name="SelfBorder"
         Margin="5"
         CornerRadius="10"
         MouseLeftButtonDown="MoveWindow">

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title></title>
-    <link rel="stylesheet" href="./vditor/index.css"/>
+    <link rel="stylesheet" href="./vditor/index.css" />
     <script src="./vditor/index.min.js"></script>
     <style>
         * {
@@ -37,39 +37,42 @@
     </style>
 </head>
 <body>
-<div id="editor">
-</div>
-<script>
-    new Vditor('editor', {
-        "height": '99%',
-        "toolbar": [
-            "list",
-            "ordered-list",
-            "table",
-            "check",
-            "code",
-            "outline",
-        ],
-        preview: {
-            theme: {
-                path: "./vditor/dist/css/content-theme"
-            }
-        },
-        "tab": "\t",
-        "icon": "material",
-        "cdn": "./vditor",
-        "toolbarConfig": {
-            "hide": false,
-        },
-        "cache": {
-            "enable": true,
-        },
-        "typewriterMode": false,
-        "value": "",
-        "mode": "wysiwyg",
-        "fullscreen": true,
-        "placeholder": "在这里编辑……"
-    })
-</script>
+    <div id="editor">
+    </div>
+    <script>
+        var editor = new Vditor('editor', {
+            "height": '99%',
+            "toolbar": [
+                "edit-mode",
+                "list",
+                "ordered-list",
+                "table",
+                "check",
+                "outline",
+            ],
+            "preview": {
+                theme: {
+                    path: "./vditor/dist/css/content-theme"
+                }
+            },
+            "tab": "\t",
+            "icon": "material",
+            "cdn": "./vditor",
+            "toolbarConfig": {
+                "hide": false,
+            },
+            "cache": {
+                "enable": true,
+            },
+            "typewriterMode": false,
+            "value": "",
+
+            "fullscreen": true,
+            "placeholder": "在这里编辑……",
+        })
+        window.focusEditor = function () {
+            editor.focus();
+        }
+    </script>
 </body>
 </html>

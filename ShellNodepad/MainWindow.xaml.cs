@@ -1,13 +1,10 @@
 ﻿using Microsoft.Web.WebView2.Core;
 using ShellNodepad.util;
 using System;
-using System.Drawing;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Timers;
 using System.Windows;
 using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Media.Animation;
 using Application = System.Windows.Application;
 using Path = System.IO.Path;
@@ -39,19 +36,24 @@ namespace ShellNodepad
                 Left = SystemParameters.PrimaryScreenWidth / 2 - ActualWidth / 2;
                 Top = SystemParameters.PrimaryScreenHeight / 2 - ActualHeight / 2;
             }
+
+#if WINDOWS7_0_OR_GREATER
+            AllowsTransparency = false;
+            SelfBorder.Margin = new Thickness(0);
+#endif
         }
         private void MoveWindow(object sender, MouseButtonEventArgs e)
         {
+
             Event.Stop = true;
             Event.Clear();
+            this.BeginAnimation(Window.TopProperty, null);
+            this.BeginAnimation(Window.LeftProperty, null);
             this.ResizeMode = ResizeMode.NoResize;
             this.DragMove();
             this.ResizeMode = ResizeMode.CanResize;
             Event.UpdatePos();
             Event.Stop = false;
-            Event.OnMouseLeave();
-            MaxHeight = SystemParameters.WorkArea.Height;
-            MaxWidth = SystemParameters.WorkArea.Width;
         }
 
         private async void ViewLoaded(object sender, RoutedEventArgs e)
@@ -99,12 +101,15 @@ namespace ShellNodepad
             }
             else
             {
+                WebView.CoreWebView2.NewWindowRequested += CoreWebView2_NewWindowRequested;
                 WebView.CoreWebView2.DOMContentLoaded += CoreWebView2_DOMContentLoaded;
                 WebView.CoreWebView2.WebResourceRequested += CustomResourceResponse;
                 WebView.CoreWebView2.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
                 WebView.CoreWebView2.AddHostObjectToScript("_PC", Event);
-                WebView.CoreWebView2.Navigate("file:///index.html");
+                var url = "file:///index.html";
+                WebView.CoreWebView2.Navigate(url);
 #if !DEBUG
+                WebView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;
                 WebView.CoreWebView2.Settings.IsPasswordAutosaveEnabled = false;
                 WebView.CoreWebView2.Settings.IsGeneralAutofillEnabled = true;
                 WebView.CoreWebView2.Settings.IsZoomControlEnabled = false;
@@ -117,10 +122,15 @@ namespace ShellNodepad
 
         }
 
+        private void CoreWebView2_NewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
+        {
+            System.Diagnostics.Process.Start("explorer.exe", e.Uri);
+            e.Handled = true;
+        }
+
         private async void CoreWebView2_DOMContentLoaded(object? sender, CoreWebView2DOMContentLoadedEventArgs e)
         {
             await WebView.ExecuteScriptAsync("document.onmouseenter = function(){chrome.webview.hostObjects.sync._PC.onMouseEnter();}");
-            await WebView.ExecuteScriptAsync("document.onmouseleave = function(){chrome.webview.hostObjects.sync._PC.onMouseLeave();}");
             Event.UpdatePos();
             Event.OnMouseLeave(2000);
         }
@@ -144,19 +154,14 @@ namespace ShellNodepad
             this.Close();
         }
 
-        private void OnLocationChanged(object sender, EventArgs e)
-        {
-        }
-
         public class InnerEvent
         {
-            private Graphics currentGraphics = Graphics.FromHwnd(new WindowInteropHelper(Application.Current.MainWindow).Handle);
             private MainWindow mw;
             private bool dock;
             private bool isHidden;
             private bool isTop;
             private Timer? timer;
-            private int triggerWeight = 15;
+            private int triggerWeight = 12;
             private int marginBorder = 2;
             private int amTime = 350;
             private Storyboard? storyboard;
@@ -167,7 +172,6 @@ namespace ShellNodepad
             {
                 this.mw = mw;
                 this.mw.MouseEnter += (a, e) => OnMouseEnter();
-                this.mw.MouseLeave += (a, e) => OnMouseLeave();
             }
 
             private void ToggleVisible()
@@ -198,35 +202,41 @@ namespace ShellNodepad
 
             public void OnMouseEnter()
             {
+                mw.Dispatcher.Invoke(async () =>
+                {
+                    this.mw.Focus();
+                    this.mw.Activate();
+                    await this.mw.WebView.ExecuteScriptAsync("focusEditor()");
+                });
                 if (Stop) return;
                 if (!dock) return;
-                if (!isHidden) return;
-                isHidden = false;
                 mw.Dispatcher.Invoke(() =>
                 {
+                    if (!isHidden) return;
                     Clear();
-                    ToggleVisible();
+                    //Trace.WriteLine("开始进入");
+                    isHidden = false;
                     if (isTop) Move("Top", marginBorder);
                     else Move("Left", SystemParameters.PrimaryScreenWidth - mw.Width - marginBorder);
                 });
             }
-
             public void OnMouseLeave(int? timeOut = null)
             {
                 if (Stop) return;
+                if (!dock) return;
                 timer = new Timer();
                 timer.AutoReset = false;
                 timer.Elapsed += (a, e) =>
                 {
-                    if (!dock) return;
                     if (isHidden) return;
                     if (IsInWindow()) return;
-                    isHidden = true;
                     mw.Dispatcher.Invoke(() =>
                     {
+                        isHidden = true;
                         Clear();
-                        if (isTop) Move("Top", triggerWeight - mw.Height, ToggleVisible);
-                        else Move("Left", SystemParameters.PrimaryScreenWidth - triggerWeight, ToggleVisible);
+                        //Trace.WriteLine("开始离开");
+                        if (isTop) Move("Top", triggerWeight - mw.Height);
+                        else Move("Left", SystemParameters.PrimaryScreenWidth - triggerWeight);
                     });
                 };
                 timer.Interval = timeOut ?? 600;
@@ -239,21 +249,7 @@ namespace ShellNodepad
             /// <returns></returns>
             private bool IsInWindow()
             {
-                return mw.Dispatcher.Invoke(() =>
-                {
-                    var DpiX = currentGraphics.DpiX / 96;
-                    var DpiY = currentGraphics.DpiY / 96;
-                    double MousePositionX = System.Windows.Forms.Control.MousePosition.X / DpiX;
-                    double MousePositionY = System.Windows.Forms.Control.MousePosition.Y / DpiY;
-                    if (MousePositionX < mw.Left ||
-                        MousePositionY < mw.Top ||
-                        MousePositionX > mw.Left + mw.Width ||
-                        MousePositionY > mw.Top + mw.Height)
-                    {
-                        return false;
-                    }
-                    return true;
-                });
+                return false;
             }
 
             /// <summary>
@@ -262,14 +258,10 @@ namespace ShellNodepad
             /// <param name="prop">属性</param>
             /// <param name="value">值</param>
             /// <param name="localAmTime">运动时间</param>
-            private void Move(string prop, double value, Action onComplete = null)
+            private void Move(string prop, double value, Action? onComplete = null)
             {
                 mw.Dispatcher.Invoke(() =>
                 {
-                    if (storyboard != null)
-                    {
-                        storyboard.Stop();
-                    }
                     storyboard = new();
                     {
                         DoubleAnimationUsingKeyFrames doubleAnimation = new DoubleAnimationUsingKeyFrames();
@@ -279,15 +271,15 @@ namespace ShellNodepad
                             KeyTime = TimeSpan.FromMilliseconds(amTime)
                         });
                         Storyboard.SetTargetProperty(doubleAnimation, new PropertyPath($"(Window.{prop})"));
-                        Storyboard.SetTarget(doubleAnimation, mw);
                         storyboard.Children.Add(doubleAnimation);
                     }
-                    Storyboard.SetTarget(storyboard, mw);
+                    //Trace.WriteLine($"{prop} {value} {amTime}");
+
                     storyboard.Completed += (a, e) =>
                     {
-                        if (onComplete != null) onComplete();
+                        onComplete?.Invoke();
                     };
-                    storyboard.Begin();
+                    storyboard.Begin(mw);
 
                 });
             }
@@ -324,7 +316,13 @@ namespace ShellNodepad
             {
                 this.mw.Dispatcher.Invoke(() =>
                 {
-                    if (storyboard != null) storyboard.Stop();
+                    if (storyboard != null)
+                    {
+                        //Trace.WriteLine("清理前动画");
+                        storyboard.Stop();
+                        storyboard.Remove();
+                        storyboard = null;
+                    };
                     if (timer != null)
                     {
                         timer.Stop();
@@ -349,13 +347,14 @@ namespace ShellNodepad
                     {
                         dock = true;
                         isTop = true;
-                        mw.Top = marginBorder;
+                        if (!isHidden) mw.Top = marginBorder;
                     }
                     else if (IsToRight())
                     {
                         dock = true;
                         isTop = false;
-                        mw.Left = SystemParameters.PrimaryScreenWidth - mw.Width - marginBorder;
+                        if (!isHidden) mw.Left = SystemParameters.PrimaryScreenWidth - mw.Width - marginBorder;
+
                     }
                     else
                     {
@@ -363,6 +362,17 @@ namespace ShellNodepad
                     }
                 });
             }
+        }
+
+        private void OnDeactivated(object sender, EventArgs e)
+        {
+            Event.UpdatePos();
+            Event.OnMouseLeave();
+        }
+
+        private void OnDragEnter(object sender, DragEventArgs e)
+        {
+            Event.OnMouseEnter();
         }
     }
 }

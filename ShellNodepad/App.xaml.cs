@@ -15,13 +15,13 @@ namespace ShellNodepad
     {
         protected override void OnStartup(StartupEventArgs e)
         {
-            //var proc = GetRunningInstance();
-            //if (proc != null)
-            //{
-            //    HandleRunningInstance(proc);
-            //    Application.Current.Shutdown();
-            //    return;
-            //}
+            var proc = GetRunningInstance();
+            if (proc != null)
+            {
+                HandleRunningInstance(proc);
+                Application.Current.Shutdown();
+                return;
+            }
             if (InstallWebview2())
             {
                 this.StartupUri = new Uri("MainWindow.xaml", UriKind.Relative);
@@ -57,12 +57,12 @@ namespace ShellNodepad
                     }
                     else
                     {
-                        throw new Exception();
+                        throw new Exception("依赖不存在");
                     }
                 }
-                catch
+                catch (Exception e)
                 {
-                    MessageBox.Show("webview2依赖安装失败！");
+                    MessageBox.Show("webview2依赖安装失败:" + e.Message);
                     Current.Shutdown();
                     return false;
                 }
