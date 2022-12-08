@@ -2,7 +2,7 @@
 
 ![](https://img.shields.io/badge/language-WPF-red.svg)
 ![](https://img.shields.io/badge/license-MIT-green.svg)
-![](https://img.shields.io/badge/version-V1.0.0.0.pre2-blue.svg)
+![](https://img.shields.io/badge/version-V1.0.0.0.pre3-blue.svg)
 
 # 环境依赖
 

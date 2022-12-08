@@ -2,10 +2,12 @@
 using ShellNodepad.util;
 using System;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Timers;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media.Animation;
 using Application = System.Windows.Application;
 using Path = System.IO.Path;
@@ -18,41 +20,28 @@ namespace ShellNodepad
     public partial class MainWindow : Window
     {
         private InnerEvent Event;
+
         public MainWindow()
         {
             InitializeComponent();
-            Event = new InnerEvent(this);
             string wt = SettingUtil.GetSetting("wt"), wl = SettingUtil.GetSetting("wl");
             string ww = SettingUtil.GetSetting("ww", "400"), wh = SettingUtil.GetSetting("wh", "650");
             if (!string.IsNullOrWhiteSpace(wt) && !string.IsNullOrWhiteSpace(wl))
             {
                 WindowStartupLocation = WindowStartupLocation.Manual;
-                Top = double.Parse(wt);
-                Left = double.Parse(wl);
                 Height = double.Parse(wh);
                 Width = double.Parse(ww);
+                Top = double.Parse(wt);
+                Left = double.Parse(wl);
             }
             else
             {
                 Left = SystemParameters.PrimaryScreenWidth / 2 - ActualWidth / 2;
                 Top = SystemParameters.PrimaryScreenHeight / 2 - ActualHeight / 2;
             }
-#if WINDOWS7_0
-            AllowsTransparency = false;
-            SelfBorder.Margin = new Thickness(0);
-#endif
-        }
-        private void MoveWindow(object sender, MouseButtonEventArgs e)
-        {
-            Event.Stop = true;
-            Event.Clear();
-            this.BeginAnimation(Window.TopProperty, null);
-            this.BeginAnimation(Window.LeftProperty, null);
-            this.ResizeMode = ResizeMode.NoResize;
-            this.DragMove();
-            this.ResizeMode = ResizeMode.CanResize;
-            Event.UpdatePos();
-            Event.Stop = false;
+            Event = new InnerEvent(this);
+            MaxWidth = 1199;
+            MaxHeight = 799;
         }
 
         private async void ViewLoaded(object sender, RoutedEventArgs e)
@@ -130,17 +119,10 @@ namespace ShellNodepad
         private async void CoreWebView2_DOMContentLoaded(object? sender, CoreWebView2DOMContentLoadedEventArgs e)
         {
             await WebView.ExecuteScriptAsync("document.onmouseenter = function(){chrome.webview.hostObjects.sync._PC.onMouseEnter();}");
-            Event.UpdatePos();
-            Event.OnMouseLeave(2000);
         }
 
         private void BeforeClose(object sender, System.ComponentModel.CancelEventArgs e)
-        {
-            SettingUtil.SetSetting("wt", this.Top + "");
-            SettingUtil.SetSetting("wl", this.Left + "");
-            SettingUtil.SetSetting("wh", this.ActualHeight + "");
-            SettingUtil.SetSetting("ww", this.ActualWidth + "");
-        }
+        { }
 
         private void OnClosed(object sender, EventArgs e)
         {
@@ -153,16 +135,30 @@ namespace ShellNodepad
             this.Close();
         }
 
+        private void OnDragEnter(object sender, DragEventArgs e)
+        {
+            Event.Clear();
+            Event.Stop = true;
+        }
+
+        private void OnDragLeave(object sender, DragEventArgs e)
+        {
+            Event.Clear();
+            Event.Stop = false;
+        }
+
         public class InnerEvent
         {
+            private Graphics currentGraphics = Graphics.FromHwnd(new WindowInteropHelper(Application.Current.MainWindow).Handle);
             private MainWindow mw;
             private bool dock;
             private bool isHidden;
             private bool isTop;
             private Timer? timer;
             private int triggerWeight = 6;
-            private int marginBorder = 2;
+            private int marginBorder = 1;
             private int amTime = 240;
+            private int offset = 50;
             private Storyboard? storyboard;
 
             public bool Stop { get; internal set; }
@@ -170,36 +166,70 @@ namespace ShellNodepad
             public InnerEvent(MainWindow mw)
             {
                 this.mw = mw;
-                this.mw.MouseEnter += (a, e) => OnMouseEnter();
-                this.mw.StateChanged += (a, e) =>
-                {
-                    if (dock && this.mw.WindowState == WindowState.Minimized)
-                    {
-                        this.mw.WindowState = WindowState.Normal;
-                        OnMouseLeave();
-                    }
-                };
+                this.mw.MouseLeftButtonDown += MoveWindow;
+                this.mw.Loaded += (a, e) => UpdatePos();
                 this.mw.SizeChanged += (a, e) =>
                 {
-                    bool userResize = false;
-                    try { userResize = storyboard?.GetCurrentState() == ClockState.Stopped; } catch { }
-                    if (dock && userResize)
+                    if (storyboard != null || mw.WindowState == WindowState.Maximized) return;
+                    SettingUtil.SetSetting("wh", e.NewSize.Height + "");
+                    SettingUtil.SetSetting("ww", e.NewSize.Width + "");
+                };
+                this.mw.LocationChanged += (a, e) =>
+                {
+                    if (storyboard != null || mw.WindowState == WindowState.Maximized) return;
+                    UpdatePos();
+                };
+                this.mw.Deactivated += (a, e) => { if (dock) OnLeave(); };
+                this.mw.StateChanged += (a, e) =>
+                {
+                    Debug.WriteLine("状态变更");
+                    this.mw.Topmost = true;
+                    if (this.mw.WindowState == WindowState.Minimized)
                     {
-                        if (isTop)
-                        {
-                            rawValue = e.NewSize.Height;
-                        }
-                        else
-                        {
-                            rawValue = e.NewSize.Width;
-                        }
+                        this.mw.WindowState = WindowState.Normal;
+                        Clear();
+                        if (dock) OnLeave();
+                    }
+                    else if (this.mw.WindowState == WindowState.Maximized)
+                    {
+                        return;
+                    }
+                    else
+                    {
+                        UpdatePos();
                     }
                 };
+
+                this.timer = new Timer();
+                this.timer.Interval = 300;
+                this.timer.Elapsed += (a, e) =>
+                {
+                    if (Stop || !dock) return;
+                    if (isHidden)
+                    {
+                        if (IsInWindow()) OnEnter();
+                    }
+                    else OnLeave();
+                };
+                this.timer.AutoReset = true;
+                this.timer.Start();
             }
 
-            private double rawValue;
+            #region 判定和运动
+            private void OnLeave()
+            {
+                mw.Dispatcher.Invoke(() =>
+                {
+                    if (this.mw.IsActive) return;
+                    isHidden = true;
+                    Debug.WriteLine("隐藏了");
+                    Clear();
+                    if (isTop) Move("Top", -1 * mw.Height - offset);
+                    else Move("Left", SystemParameters.PrimaryScreenWidth + offset);
+                });
+            }
 
-            public void OnMouseEnter(bool activte = true)
+            public void OnEnter(bool activte = true)
             {
                 if (activte)
                 {
@@ -213,44 +243,51 @@ namespace ShellNodepad
                 mw.Dispatcher.Invoke(() =>
                 {
                     if (!isHidden) return;
-                    Clear();
-                    Trace.WriteLine("开始进入");
                     isHidden = false;
+                    Debug.WriteLine("显示了");
+                    Clear();
                     if (isTop) Move("Top", marginBorder);
                     else Move("Left", SystemParameters.PrimaryScreenWidth - mw.Width - marginBorder);
                 });
             }
-            public void OnMouseLeave(int? timeOut = null)
-            {
-                if (Stop) return;
-                if (!dock) return;
-                timer = new Timer();
-                timer.AutoReset = false;
-                timer.Elapsed += (a, e) =>
-                {
-                    if (isHidden) return;
-                    if (IsInWindow()) return;
-                    mw.Dispatcher.Invoke(() =>
-                    {
-                        isHidden = true;
-                        Clear();
-                        Trace.WriteLine("开始离开");
-                        if (isTop) Move("Top", triggerWeight - mw.Height);
-                        else Move("Left", SystemParameters.PrimaryScreenWidth - triggerWeight);
-                    });
-                };
-                timer.Interval = timeOut ?? 600;
-                timer.Start();
-            }
 
             /// <summary>
-            /// 验证当前鼠标是否仍然悬停在窗口范围内
+            /// 验证当前鼠标是否进入区域
             /// </summary>
             /// <returns></returns>
             private bool IsInWindow()
             {
-                return false;
+                return mw.Dispatcher.Invoke(() =>
+                {
+                    var DpiX = currentGraphics.DpiX / 96;
+                    var DpiY = currentGraphics.DpiY / 96;
+                    double MousePositionX = System.Windows.Forms.Control.MousePosition.X / DpiX;
+                    double MousePositionY = System.Windows.Forms.Control.MousePosition.Y / DpiY;
+                    if (MousePositionX + triggerWeight + offset < mw.Left ||
+                        MousePositionY + triggerWeight + offset < mw.Top ||
+                        MousePositionX - triggerWeight - offset > mw.Left + mw.Width ||
+                        MousePositionY - triggerWeight - offset > mw.Top + mw.Height)
+                    {
+                        return false;
+                    }
+                    return true;
+                });
             }
+            private void MoveWindow(object sender, MouseButtonEventArgs e)
+            {
+                Clear();
+                Stop = true;
+                mw.ResizeMode = ResizeMode.NoResize;
+                mw.DragMove();
+                SettingUtil.SetSetting("wt", mw.Top + "");
+                SettingUtil.SetSetting("wl", mw.Left + "");
+                UpdatePos();
+                mw.ResizeMode = ResizeMode.CanResize;
+                Stop = false;
+
+            }
+
+
 
             /// <summary>
             /// 移动到指定位置
@@ -270,41 +307,22 @@ namespace ShellNodepad
                             Value = value,
                             KeyTime = TimeSpan.FromMilliseconds(amTime)
                         });
+                        doubleAnimation.FillBehavior = FillBehavior.HoldEnd;
                         Storyboard.SetTargetProperty(doubleAnimation, new PropertyPath($"(Window.{prop})"));
                         storyboard.Children.Add(doubleAnimation);
                     }
-                    if (isHidden)
-                    {
-                        DoubleAnimationUsingKeyFrames doubleAnimation = new DoubleAnimationUsingKeyFrames();
-                        if (isTop) { rawValue = mw.Width; Storyboard.SetTargetProperty(doubleAnimation, new PropertyPath($"(Window.Width)")); }
-                        else { rawValue = mw.Height; Storyboard.SetTargetProperty(doubleAnimation, new PropertyPath($"(Window.Height)")); }
-                        doubleAnimation.KeyFrames.Add(new EasingDoubleKeyFrame()
-                        {
-                            Value = 100,
-                            KeyTime = TimeSpan.FromMilliseconds(amTime)
-                        });
-                        storyboard.Children.Add(doubleAnimation);
-                    }
-                    else
-                    {
-                        DoubleAnimationUsingKeyFrames doubleAnimation = new DoubleAnimationUsingKeyFrames();
-                        if (isTop) Storyboard.SetTargetProperty(doubleAnimation, new PropertyPath($"(Window.Width)"));
-                        else Storyboard.SetTargetProperty(doubleAnimation, new PropertyPath($"(Window.Height)"));
-                        doubleAnimation.KeyFrames.Add(new EasingDoubleKeyFrame()
-                        {
-                            Value = rawValue,
-                            KeyTime = TimeSpan.FromMilliseconds(amTime)
-                        });
-                        storyboard.Children.Add(doubleAnimation);
-                    }
-                    //Trace.WriteLine($"{prop} {value} {amTime}");
                     storyboard.Completed += (a, e) =>
                     {
+                        Debug.WriteLine($"动画结束{prop},{value}");
+                        this.mw.BeginAnimation(Window.LeftProperty, null);
+                        this.mw.BeginAnimation(Window.TopProperty, null);
+                        this.mw.BeginAnimation(Window.HeightProperty, null);
+                        this.mw.BeginAnimation(Window.WidthProperty, null);
                         onComplete?.Invoke();
+                        Clear();
                     };
-                    //onComplete?.Invoke();
                     storyboard.Begin(mw);
-                    Trace.WriteLine("动画开始");
+                    Debug.WriteLine($"动画开始{prop},{value}");
                 });
             }
 
@@ -342,19 +360,15 @@ namespace ShellNodepad
                 {
                     if (storyboard != null)
                     {
-                        //Trace.WriteLine("清理前动画");
                         storyboard.Stop();
                         storyboard.Remove();
                         storyboard = null;
                     };
-                    if (timer != null)
-                    {
-                        timer.Stop();
-                        timer.Dispose();
-                    }
                 });
             }
+            #endregion
 
+            #region 更新判定
             /// <summary>
             /// 更新位置并标记贴靠状态
             /// </summary>
@@ -362,57 +376,30 @@ namespace ShellNodepad
             {
                 mw.Dispatcher.Invoke(() =>
                 {
-                    try
+                    if (mw.WindowState == WindowState.Maximized)
                     {
-                        if (mw.WindowState == WindowState.Maximized)
-                        {
-                            dock = false;
-                            return;
-                        }
-                        if (IsToTop())
-                        {
-                            dock = true;
-                            isTop = true;
-                            if (!isHidden) mw.Top = marginBorder;
-                        }
-                        else if (IsToRight())
-                        {
-                            dock = true;
-                            isTop = false;
-                            if (!isHidden) mw.Left = SystemParameters.PrimaryScreenWidth - mw.Width - marginBorder;
-
-                        }
-                        else
-                        {
-                            dock = false;
-                        }
+                        dock = false;
+                        return;
                     }
-                    finally
+                    if (IsToTop())
                     {
-                        this.mw.Topmost = dock;
-                        this.mw.ShowInTaskbar = !dock;
+                        dock = true;
+                        isTop = true;
+                        if (!isHidden) mw.Top = marginBorder;
+                    }
+                    else if (IsToRight())
+                    {
+                        dock = true;
+                        isTop = false;
+                        if (!isHidden) mw.Left = SystemParameters.PrimaryScreenWidth - mw.Width - marginBorder;
+                    }
+                    else
+                    {
+                        dock = false;
                     }
                 });
             }
-        }
-
-        private void OnDeactivated(object sender, EventArgs e)
-        {
-            Event.UpdatePos();
-            Event.OnMouseLeave();
-        }
-
-        private void OnDragEnter(object sender, DragEventArgs e)
-        {
-            Event.Clear();
-            Event.OnMouseEnter();
-            Event.Stop = true;
-        }
-
-        private void OnDragLeave(object sender, DragEventArgs e)
-        {
-            Event.Clear();
-            Event.Stop = false;
+            #endregion
         }
     }
 }
